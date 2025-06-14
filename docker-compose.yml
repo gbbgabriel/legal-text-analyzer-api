@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+      - '9090:9090' # Métricas Prometheus
+    environment:
+      - NODE_ENV=development
+      - DOCKER=true
+      - DATABASE_URL=file:./prisma/dev.db
+      - METRICS_ENABLED=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./tmp:/app/tmp
+      - ./.env:/app/.env
+      - db_data:/app/prisma
+    depends_on:
+      - redis
+    networks:
+      - legal-api-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - legal-api-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - '9091:9090'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+      - '--web.external-url=http://localhost:9091'
+    networks:
+      - legal-api-network
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - '3001:3000'
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - legal-api-network
+    depends_on:
+      - prometheus
+
+volumes:
+  db_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  legal-api-network:
+    driver: bridge

@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Analysis {
+  id               String    @id @default(uuid())
+  text             String    // Texto completo ou trecho inicial se muito grande
+  textLength       Int       // Tamanho real do texto
+  type             String    @default("legal") // 'legal', 'general'
+  sourceType       String    @default("text") // 'text', 'txt', 'pdf', 'docx'
+  originalFilename String?   // Nome do arquivo original
+  fileSize         Int?      // Tamanho do arquivo em bytes
+  status           String    @default("processing") // 'processing', 'completed', 'failed'
+  progress         Int       @default(0) // 0-100%
+  result           String?   // Resultado da análise quando completo (JSON stringificado)
+  error            String?   // Mensagem de erro se falhou
+  processingTime   Int?      // Tempo em ms
+  chunksProcessed  Int?      // Número de chunks processados
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime? // Data de conclusão
+  failedAt         DateTime? // Data de falha
+
+  // Relacionamento com SearchHistory
+  searchHistories SearchHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([sourceType])
+}
+
+model SearchHistory {
+  id         String   @id @default(uuid())
+  term       String   // Termo buscado
+  found      Boolean  // Se foi encontrado
+  analysisId String?  // ID da análise relacionada
+  searchedAt DateTime @default(now())
+
+  // Relacionamento com Analysis
+  analysis Analysis? @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([term])
+  @@index([searchedAt])
+  @@index([analysisId])
+}
